@@ -4,10 +4,36 @@ export default function LoginPage({ appName, tenantId, businessName }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [message, setMessage] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  function handleSubmit(event) {
+  async function handleSubmit(event) {
     event.preventDefault();
-    setMessage("Login submit captured. Auth wiring comes next.");
+    setIsSubmitting(true);
+    setMessage("Signing in...");
+
+    try {
+      const result = await window.electronAPI.auth.login({
+        tenantId,
+        email,
+        password,
+      });
+
+      if (!result.ok) {
+        setMessage(result.error || "Login failed.");
+        return;
+      }
+
+      setMessage("Login successful. Opening dashboard...");
+      await window.electronAPI.window.openDashboard({
+        tenantId,
+        businessName,
+        userEmail: result.data.email,
+      });
+    } catch (_error) {
+      setMessage("Login failed. Check backend connectivity.");
+    } finally {
+      setIsSubmitting(false);
+    }
   }
 
   return (
@@ -43,7 +69,9 @@ export default function LoginPage({ appName, tenantId, businessName }) {
             required
           />
 
-          <button type="submit">Log In</button>
+          <button type="submit" disabled={isSubmitting}>
+            {isSubmitting ? "Signing In..." : "Log In"}
+          </button>
         </form>
 
         {message ? <p className="message">{message}</p> : null}

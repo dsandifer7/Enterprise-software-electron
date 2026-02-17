@@ -1,0 +1,180 @@
+import { useEffect, useMemo, useState } from "react";
+import InventoryApp from "../apps/InventoryApp.jsx";
+import TimeclockApp from "../apps/TimeclockApp.jsx";
+
+const APP_COMPONENTS = {
+  inventory: InventoryApp,
+  timeclock: TimeclockApp,
+};
+
+export default function DashboardPage({ appName, tenantId, businessName, userEmail }) {
+  const [sidebarWidth, setSidebarWidth] = useState(280);
+  const [isResizing, setIsResizing] = useState(false);
+  const [catalog, setCatalog] = useState([]);
+  const [installedApps, setInstalledApps] = useState([]);
+  const [selectedAppKey, setSelectedAppKey] = useState("");
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [message, setMessage] = useState("");
+
+  const availableToInstall = useMemo(() => {
+    const installedKeys = new Set(installedApps.map((app) => app.app_key));
+    return catalog.filter((app) => !installedKeys.has(app.key));
+  }, [catalog, installedApps]);
+
+  const ActiveApp = APP_COMPONENTS[selectedAppKey];
+
+  async function loadShellData() {
+    setIsLoading(true);
+    const [catalogResult, installedResult] = await Promise.all([
+      window.electronAPI.apps.listCatalog(),
+      window.electronAPI.apps.listInstalled(tenantId),
+    ]);
+
+    if (!catalogResult.ok) {
+      setMessage(catalogResult.error || "Failed to load app catalog.");
+      setIsLoading(false);
+      return;
+    }
+    if (!installedResult.ok) {
+      setMessage(installedResult.error || "Failed to load installed apps.");
+      setIsLoading(false);
+      return;
+    }
+
+    setCatalog(catalogResult.data);
+    setInstalledApps(installedResult.data);
+    if (installedResult.data.length > 0) {
+      setSelectedAppKey(installedResult.data[0].app_key);
+    } else {
+      setSelectedAppKey("");
+    }
+    setIsLoading(false);
+  }
+
+  useEffect(() => {
+    loadShellData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tenantId]);
+
+  async function handleInstall(appKey) {
+    setMessage(`Installing ${appKey}...`);
+    const result = await window.electronAPI.apps.install({ tenantId, appKey });
+    if (!result.ok) {
+      setMessage(result.error || "Install failed.");
+      return;
+    }
+    await loadShellData();
+    setSelectedAppKey(appKey);
+    setIsAddModalOpen(false);
+    setMessage(`Installed ${appKey}.`);
+  }
+
+  useEffect(() => {
+    if (!isResizing) {
+      return undefined;
+    }
+
+    function handleMouseMove(event) {
+      const nextWidth = Math.max(220, Math.min(440, event.clientX));
+      setSidebarWidth(nextWidth);
+    }
+
+    function handleMouseUp() {
+      setIsResizing(false);
+    }
+
+    window.addEventListener("mousemove", handleMouseMove);
+    window.addEventListener("mouseup", handleMouseUp);
+
+    return () => {
+      window.removeEventListener("mousemove", handleMouseMove);
+      window.removeEventListener("mouseup", handleMouseUp);
+    };
+  }, [isResizing]);
+
+  return (
+    <main className="app-shell" style={{ gridTemplateColumns: `${sidebarWidth}px 8px 1fr` }}>
+      <aside className="app-nav">
+        <h1>{appName}</h1>
+        <p className="subtitle">{businessName || tenantId}</p>
+        <p className="subtitle">{userEmail || ""}</p>
+
+        <button onClick={() => setIsAddModalOpen(true)}>Add New App</button>
+
+        <div className="app-list">
+          <h3>Installed Apps</h3>
+          {installedApps.length === 0 ? (
+            <p className="subtitle">No apps installed yet.</p>
+          ) : (
+            installedApps.map((app) => (
+              <button
+                key={app.app_key}
+                className={app.app_key === selectedAppKey ? "app-tab app-tab-active" : "app-tab"}
+                onClick={() => setSelectedAppKey(app.app_key)}
+              >
+                {app.app_key}
+              </button>
+            ))
+          )}
+        </div>
+      </aside>
+
+      <div
+        className="app-resizer"
+        onMouseDown={() => setIsResizing(true)}
+        role="separator"
+        aria-orientation="vertical"
+        aria-label="Resize sidebar"
+      />
+
+      <section className="app-workspace">
+        {isLoading ? <p className="subtitle">Loading workspace...</p> : null}
+        {!isLoading && !selectedAppKey ? (
+          <div className="card">
+            <h2>App Shell Ready</h2>
+            <p className="subtitle">
+              Click <strong>Add New App</strong> to install your first tenant app.
+            </p>
+          </div>
+        ) : null}
+        {!isLoading && selectedAppKey && ActiveApp ? <ActiveApp tenantId={tenantId} /> : null}
+        {!isLoading && selectedAppKey && !ActiveApp ? (
+          <div className="card">
+            <h2>Unknown App</h2>
+            <p className="subtitle">No renderer module mapped for: {selectedAppKey}</p>
+          </div>
+        ) : null}
+
+        {message ? <p className="message">{message}</p> : null}
+      </section>
+
+      {isAddModalOpen ? (
+        <div className="modal-overlay" onClick={() => setIsAddModalOpen(false)}>
+          <div className="modal-card" onClick={(event) => event.stopPropagation()}>
+            <h2>Add New App</h2>
+            <p className="subtitle">Install apps available for this tenant.</p>
+            {availableToInstall.length === 0 ? (
+              <p className="subtitle">No additional apps available right now.</p>
+            ) : (
+              <div className="catalog-list">
+                {availableToInstall.map((app) => (
+                  <div key={app.key} className="catalog-row">
+                    <div>
+                      <p className="catalog-title">{app.name}</p>
+                      <p className="subtitle">{app.description}</p>
+                    </div>
+                    <button onClick={() => handleInstall(app.key)}>Install</button>
+                  </div>
+                ))}
+              </div>
+            )}
+            <button className="secondary-btn" onClick={() => setIsAddModalOpen(false)}>
+              Close
+            </button>
+          </div>
+        </div>
+      ) : null}
+    </main>
+  );
+}

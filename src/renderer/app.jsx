@@ -1,11 +1,28 @@
 import { useEffect, useState } from "react";
 import ActivatePage from "./pages/ActivatePage.jsx";
 import LoginPage from "./pages/LoginPage.jsx";
+import DashboardPage from "./pages/DashboardPage.jsx";
 
 export default function App() {
   const appName = window.electronAPI?.appName ?? "Enterprise Software Electron";
+  const searchParams = new URLSearchParams(window.location.search);
+  const screen = searchParams.get("screen");
+  const tenantIdFromQuery = searchParams.get("tenantId") || "";
+  const businessNameFromQuery = searchParams.get("businessName") || "";
+  const userEmailFromQuery = searchParams.get("userEmail") || "";
   const [isLoading, setIsLoading] = useState(true);
   const [bootstrapState, setBootstrapState] = useState(null);
+
+  if (screen === "dashboard") {
+    return (
+      <DashboardPage
+        appName={appName}
+        tenantId={tenantIdFromQuery}
+        businessName={businessNameFromQuery}
+        userEmail={userEmailFromQuery}
+      />
+    );
+  }
 
   useEffect(() => {
     let mounted = true;
