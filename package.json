@@ -1,0 +1,35 @@
+{
+  "name": "enterprise-software-electron",
+  "version": "1.0.0",
+  "description": "Base Electron app scaffold",
+  "main": "src/main/main.js",
+  "scripts": {
+    "start": "electron .",
+    "dev": "concurrently -k \"npm:dev:renderer\" \"npm:dev:electron\"",
+    "dev:full": "concurrently -k \"cd backend && .\\.venv\\Scripts\\python.exe -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000\" \"npm run dev\"",
+    "dev:renderer": "vite",
+    "dev:electron": "wait-on tcp:5173 && set ELECTRON_RUN_AS_NODE=&& set ELECTRON_RENDERER_URL=http://localhost:5173&& electron .",
+    "build:renderer": "vite build",
+    "build": "npm run build:renderer",
+    "preview": "vite preview",
+    "clean": "if exist dist rmdir /s /q dist",
+    "pack": "npm run build:renderer && electron-builder --dir",
+    "dist": "npm run build:renderer && electron-builder",
+    "test": "echo \"No tests configured\""
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@vitejs/plugin-react": "^5.1.4",
+    "electron": "^40.4.1",
+    "vite": "^7.3.1"
+  },
+  "dependencies": {
+    "concurrently": "^9.2.1",
+    "electron-builder": "^26.7.0",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4",
+    "wait-on": "^9.0.4"
+  }
+}
