@@ -40,5 +40,7 @@ contextBridge.exposeInMainWorld("electronAPI", {
   },
   window: {
     openDashboard: (payload) => ipcRenderer.invoke("window:open-dashboard", payload),
+    openChat: (payload) => ipcRenderer.invoke("window:open-chat", payload),
   },
+
 });
