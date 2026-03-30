@@ -43,24 +43,18 @@ export default function ChatApp({ tenantId, userId, userEmail }) {
   }
 
   async function fetchConversation(withUserId) {
-    const res = await fetch("http://127.0.0.1:8000/chat/messages", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        tenant_id: tenantId,
-        user_id: userId,
-        with_user_id: withUserId,
-        limit: 50,
-        offset: 0,
-      }),
+    const result = await window.electronAPI.chat.listMessages({
+      tenantId,
+      userId,
+      withUserId,
     });
 
-    if (!res.ok) {
-      console.error("Failed to load messages", await res.text());
+    if (!result.ok) {
+      console.error("Failed to load messages", result.error);
       return null;
     }
 
-    const data = await res.json();
+    const data = result.data;
     return Array.isArray(data) ? data : [];
   }
 
@@ -81,22 +75,13 @@ export default function ChatApp({ tenantId, userId, userEmail }) {
   async function loadUsers() {
     if (!tenantId || !userId) return;
 
-    const res = await fetch(
-      `http://127.0.0.1:8000/users?tenant_id=${encodeURIComponent(tenantId)}`,
-      {
-        method: "GET",
-        headers: { "Content-Type": "application/json" },
-      }
-    );
-
-    if (!res.ok) {
-      console.error("Failed to load users", await res.text());
+    const result = await window.electronAPI.chat.listUsers(tenantId);
+    if (!result.ok) {
+      console.error("Failed to load users", result.error);
       return;
     }
 
-    const raw = await res.json();
-    const data = Array.isArray(raw) ? raw : [];
-
+    const data = Array.isArray(result.data) ? result.data : [];
     const others = data.filter((u) => u.id !== userId);
     setUsers(others);
 
@@ -114,7 +99,6 @@ export default function ChatApp({ tenantId, userId, userEmail }) {
       if (!data) return;
 
       setMessages(data);
-
       markConversationSeen(otherUserId, data);
       setUnreadByUser((prev) => ({ ...prev, [otherUserId]: 0 }));
     } finally {
@@ -128,23 +112,19 @@ export default function ChatApp({ tenantId, userId, userEmail }) {
 
     setInput("");
 
-    const res = await fetch("http://127.0.0.1:8000/chat/send", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        tenant_id: tenantId,
-        from_user_id: userId,
-        to_user_id: otherUserId,
-        text,
-      }),
+    const result = await window.electronAPI.chat.sendMessage({
+      tenantId,
+      fromUserId: userId,
+      toUserId: otherUserId,
+      text,
     });
 
-    if (!res.ok) {
-      console.error("Failed to send message", await res.text());
+    if (!result.ok) {
+      console.error("Failed to send message", result.error);
       return;
     }
 
-    const msg = await res.json();
+    const msg = result.data;
     setMessages((prev) => [...prev, msg]);
   }
 
@@ -181,146 +161,140 @@ export default function ChatApp({ tenantId, userId, userEmail }) {
         {otherUser ? `, chatting with ${(otherUser.email || "").split("@")[0]}` : ""})
       </div>
       <div style={{ display: "flex", flex: 1, overflow: "hidden" }}>
-      {/* recipients list */}
-      <div
-        style={{
-          width: "140px",
-          minWidth: "140px",
-          borderRight: "1px solid #ddd",
-          overflowY: "auto",
-          display: "flex",
-          flexDirection: "column",
-          gap: "4px",
-          padding: "8px",
-        }}
-      >
-        {users.map((u) => (
-          <button
-            key={u.id}
-            onClick={() => setOtherUserId(u.id)}
-            style={{
-              padding: "4px 8px",
-              borderRadius: "4px",
-              border:
-                otherUserId === u.id
-                  ? "2px solid #00ff9d"
-                  : "1px solid #ccccccc4",
-              background:
-                otherUserId === u.id ? "#e6f0ff91" : "rgba(255,255,255,0.9)",
-              cursor: "pointer",
-              color: "#000",
-            }}
-          >
-            <span
+        <div
+          style={{
+            width: "140px",
+            minWidth: "140px",
+            borderRight: "1px solid #ddd",
+            overflowY: "auto",
+            display: "flex",
+            flexDirection: "column",
+            gap: "4px",
+            padding: "8px",
+          }}
+        >
+          {users.map((u) => (
+            <button
+              key={u.id}
+              onClick={() => setOtherUserId(u.id)}
               style={{
-                display: "inline-flex",
-                width: "100%",
-                justifyContent: "space-between",
-                alignItems: "center",
-                gap: "6px",
+                padding: "4px 8px",
+                borderRadius: "4px",
+                border: otherUserId === u.id ? "2px solid #00ff9d" : "1px solid #ccccccc4",
+                background: otherUserId === u.id ? "#e6f0ff91" : "rgba(255,255,255,0.9)",
+                cursor: "pointer",
+                color: "#000",
               }}
             >
-              <span>{(u.email || "").split("@")[0]}</span>
-              {unreadByUser[u.id] > 0 ? (
-                <span
-                  style={{
-                    minWidth: "18px",
-                    height: "18px",
-                    padding: "0 5px",
-                    borderRadius: "999px",
-                    background: "#ef4444",
-                    color: "#fff",
-                    fontSize: "11px",
-                    fontWeight: 700,
-                    lineHeight: "18px",
-                    textAlign: "center",
-                  }}
-                >
-                  {unreadByUser[u.id]}
-                </span>
-              ) : null}
-            </span>
-          </button>
-        ))}
-      </div>
-      <div style={{ display: "flex", flexDirection: "column", flex: 1, overflow: "hidden" }}>
-      {/* messages list */}
-      <div
-        style={{
-          flex: 1,
-          overflowY: "auto",
-          padding: "8px",
-          background: "#f5f5f5",
-        }}
-      >
-        {loading && <div>Loading...</div>}
-        {!loading &&
-          messages.map((m) => (
-            <div
-              key={m.id}
-              style={{
-                marginBottom: "8px",
-                textAlign: m.from_user_id === userId ? "right" : "left",
-              }}
-            >
-              <div
+              <span
                 style={{
-                  display: "inline-block",
-                  padding: "6px 10px",
-                  borderRadius: "6px",
-                  background:
-                    m.from_user_id === userId ? "#007bff" : "#e0e0e0",
-                  color: m.from_user_id === userId ? "#fff" : "#000",
-                  maxWidth: "85%",
+                  display: "inline-flex",
+                  width: "100%",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  gap: "6px",
                 }}
               >
-                <div>{m.text}</div>
+                <span>{(u.email || "").split("@")[0]}</span>
+                {unreadByUser[u.id] > 0 ? (
+                  <span
+                    style={{
+                      minWidth: "18px",
+                      height: "18px",
+                      padding: "0 5px",
+                      borderRadius: "999px",
+                      background: "#ef4444",
+                      color: "#fff",
+                      fontSize: "11px",
+                      fontWeight: 700,
+                      lineHeight: "18px",
+                      textAlign: "center",
+                    }}
+                  >
+                    {unreadByUser[u.id]}
+                  </span>
+                ) : null}
+              </span>
+            </button>
+          ))}
+        </div>
+
+        <div style={{ display: "flex", flexDirection: "column", flex: 1, overflow: "hidden" }}>
+          <div
+            style={{
+              flex: 1,
+              overflowY: "auto",
+              padding: "8px",
+              background: "#f5f5f5",
+            }}
+          >
+            {loading && <div>Loading...</div>}
+            {!loading &&
+              messages.map((m) => (
                 <div
+                  key={m.id}
                   style={{
-                    marginTop: "4px",
-                    fontSize: "11px",
-                    opacity: 0.8,
+                    marginBottom: "8px",
+                    textAlign: m.from_user_id === userId ? "right" : "left",
                   }}
                 >
-                  {new Date(m.created_at + (m.created_at.includes('Z') ? '' : 'Z')).toLocaleTimeString([], {
-                    hour: "2-digit",
-                    minute: "2-digit",
-                  })}
+                  <div
+                    style={{
+                      display: "inline-block",
+                      padding: "6px 10px",
+                      borderRadius: "6px",
+                      background: m.from_user_id === userId ? "#007bff" : "#e0e0e0",
+                      color: m.from_user_id === userId ? "#fff" : "#000",
+                      maxWidth: "85%",
+                    }}
+                  >
+                    <div>{m.text}</div>
+                    <div
+                      style={{
+                        marginTop: "4px",
+                        fontSize: "11px",
+                        opacity: 0.8,
+                      }}
+                    >
+                      {new Date(m.created_at + (m.created_at.includes("Z") ? "" : "Z")).toLocaleTimeString([], {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
+                    </div>
+                  </div>
                 </div>
-              </div>
-            </div>
-          ))}
-      </div>
+              ))}
+          </div>
 
-      <div
-        style={{
-          display: "flex",
-          flexWrap: "wrap",
-          padding: "8px",
-          borderTop: "1px solid #ddd",
-          gap: "8px",
-        }}
-      >
-        <input
-          style={{ flex: "1 1 140px", minWidth: 0 }}
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") sendMessage();
-          }}
-          placeholder={
-            otherUser
-              ? `Type a message to ${(otherUser.email || "").split("@")[0]}…`
-              : "Select a recipient…"
-          }
-          disabled={!otherUserId}
-        />
-        <button onClick={sendMessage} disabled={!otherUserId}>
-          Send
-        </button>
+          <div
+            style={{
+              display: "flex",
+              flexWrap: "wrap",
+              padding: "8px",
+              borderTop: "1px solid #ddd",
+              gap: "8px",
+            }}
+          >
+            <input
+              style={{ flex: "1 1 140px", minWidth: 0 }}
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") sendMessage();
+              }}
+              placeholder={
+                otherUser
+                  ? `Type a message to ${(otherUser.email || "").split("@")[0]}...`
+                  : "Select a recipient..."
+              }
+              disabled={!otherUserId}
+            />
+            <button onClick={sendMessage} disabled={!otherUserId}>
+              Send
+            </button>
+          </div>
+        </div>
       </div>
     </div>
-  </div>
-  </div>
   );
 }
