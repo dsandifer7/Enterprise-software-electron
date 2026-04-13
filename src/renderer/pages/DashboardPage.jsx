@@ -102,7 +102,7 @@ export default function DashboardPage({ appName, tenantId, businessName, userEma
         const messagesRes = await fetch("http://localhost:8000/chat/messages", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ tenant_id: tenantId, with_user_id: user.id }),
+          body: JSON.stringify({ tenant_id: tenantId, user_id: userId, with_user_id: user.id }),
         });
         if (!messagesRes.ok) continue;
         const data = await messagesRes.json();
